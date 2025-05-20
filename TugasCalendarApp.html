@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="style.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Manajemen Tugas & Jadwal Kegiatan</title>
+</head>
+<body>
+<h1>Manajemen Tugas & Jadwal Kegiatan</h1>
+
+<section class="form-card" aria-label="Form input tugas">
+    <form id="taskForm" action="https://formspree.io/f/meoggado" method="POST" autocomplete="off">
+    <label for="taskName">Nama Tugas</label>
+    <input type="text" id="taskName" name="taskName" placeholder="Masukkan nama tugas" required minlength="3" maxlength="50" />
+
+    <label for="deadline">Deadline</label>
+    <input type="date" id="deadline" name="deadline" required />
+
+    <label for="category">Kategori</label>
+    <select id="category" name="category" required>
+      <option value="" disabled selected>Pilih kategori</option>
+      <option value="kuliah">Kuliah</option>
+      <option value="organisasi">Organisasi</option>
+    </select>
+
+    <button type="submit" aria-label="Tambah tugas">Tambah Tugas</button>
+  </form>
+</section>
+
+<section class="filter-card" aria-label="Filter tugas">
+  <select id="filterCategory" aria-label="Filter berdasarkan kategori">
+    <option value="all">Semua Kategori</option>
+    <option value="kuliah">Kuliah</option>
+    <option value="organisasi">Organisasi</option>
+  </select>
+
+  <select id="filterDeadline" aria-label="Filter deadline terdekat">
+    <option value="none">Urutkan Deadline</option>
+    <option value="asc">Deadline Terdekat</option>
+    <option value="desc">Deadline Terjauh</option>
+  </select>
+</section>
+
+<section aria-label="Daftar tugas">
+  <table role="grid" id="taskTable" aria-live="polite" aria-relevant="additions removals">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Nama Tugas</th>
+        <th>Deadline</th>
+        <th>Kategori</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Tasks will be inserted here dynamically -->
+    </tbody>
+  </table>
+</section>
+
+<script>
+  (function() {
+    const form = document.getElementById('taskForm');
+    const taskNameInput = document.getElementById('taskName');
+    const deadlineInput = document.getElementById('deadline');
+    const categoryInput = document.getElementById('category');
+
+    const filterCategory = document.getElementById('filterCategory');
+    const filterDeadline = document.getElementById('filterDeadline');
+
+    const taskTableBody = document.querySelector('#taskTable tbody');
+
+    let tasks = [];
+
+    // Utility: format date to localized string (dd-mm-yyyy)
+    function formatDate(dateStr) {
+      const d = new Date(dateStr);
+      if (isNaN(d)) return '';
+      return d.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    }
+
+    // Load tasks from localStorage
+    function loadTasks() {
+      const saved = localStorage.getItem('tasks');
+      if (saved) {
+        try {
+          tasks = JSON.parse(saved).map(task => ({
+            ...task,
+            deadline: task.deadline // keep as string ISO format
+          }));
+        } catch (e) {
+          tasks = [];
+        }
+      }
+      renderTasks();
+    }
+
+    // Save tasks to localStorage
+    function saveTasks() {
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+    }
+
+    // Render task table based on current filters
+    function renderTasks() {
+      // Apply filters
+      let filtered = tasks.slice();
+
+      const categoryFilterVal = filterCategory.value;
+      const deadlineFilterVal = filterDeadline.value;
+
+      if (categoryFilterVal !== 'all') {
+        filtered = filtered.filter(t => t.category === categoryFilterVal);
+      }
+
+      if (deadlineFilterVal === 'asc') {
+        filtered.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+      } else if (deadlineFilterVal === 'desc') {
+        filtered.sort((a, b) => new Date(b.deadline) - new Date(a.deadline));
+      }
+
+      // Clear table body
+      taskTableBody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="5" style="font-style: italic; color: #666;">Tidak ada tugas.</td>`;
+        taskTableBody.appendChild(tr);
+        return;
+      }
+
+      // Create rows
+      filtered.forEach((task, idx) => {
+        const tr = document.createElement('tr');
+
+        // Status with dropdown
+        const statusTd = document.createElement('td');
+        const statusSelect = document.createElement('select');
+        statusSelect.className = 'status-select';
+        const optionProgress = document.createElement('option');
+        optionProgress.value = 'on progress';
+        optionProgress.text = 'On Progress';
+        optionProgress.className = 'on-progress';
+        const optionSelesai = document.createElement('option');
+        optionSelesai.value = 'selesai';
+        optionSelesai.text = 'Selesai';
+        optionSelesai.className = 'selesai';
+        statusSelect.appendChild(optionProgress);
+        statusSelect.appendChild(optionSelesai);
+        statusSelect.value = task.status;
+        // Update style classes on statusSelect based on value
+        statusSelect.classList.remove('on-progress', 'selesai');
+        statusSelect.classList.add(task.status === 'selesai' ? 'selesai' : 'on-progress');
+        // Change handler for status update
+        statusSelect.addEventListener('change', (e) => {
+          task.status = e.target.value;
+          // Update style class
+          statusSelect.classList.remove('on-progress', 'selesai');
+          statusSelect.classList.add(task.status === 'selesai' ? 'selesai' : 'on-progress');
+          saveTasks();
+          renderTasks(); // re-render in case you want to reorder or filter after status change
+        });
+        statusTd.appendChild(statusSelect);
+        tr.appendChild(statusTd);
+
+        // Name
+        const nameTd = document.createElement('td');
+        nameTd.textContent = task.name;
+        nameTd.title = task.name;
+        tr.appendChild(nameTd);
+
+        // Deadline
+        const deadlineTd = document.createElement('td');
+        deadlineTd.textContent = formatDate(task.deadline);
+        deadlineTd.title = formatDate(task.deadline);
+        tr.appendChild(deadlineTd);
+
+        // Category
+        const categoryTd = document.createElement('td');
+        categoryTd.textContent = task.category.charAt(0).toUpperCase() + task.category.slice(1);
+        tr.appendChild(categoryTd);
+
+        // Action (delete)
+        const actionTd = document.createElement('td');
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Hapus';
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.setAttribute('aria-label', `Hapus tugas ${task.name}`);
+        deleteBtn.addEventListener('click', () => {
+          if (confirm(`Yakin ingin menghapus tugas "${task.name}"?`)) {
+            tasks.splice(tasks.indexOf(task), 1);
+            saveTasks();
+            renderTasks();
+          }
+        });
+        actionTd.appendChild(deleteBtn);
+        tr.appendChild(actionTd);
+
+        taskTableBody.appendChild(tr);
+      });
+    }
+
+    // Validate and add new task
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      // Trim and validate task name length
+      const nameVal = taskNameInput.value.trim();
+      if (nameVal.length < 3 || nameVal.length > 50) {
+        alert('Nama tugas harus antara 3 sampai 50 karakter.');
+        return;
+      }
+
+      const deadlineVal = deadlineInput.value;
+      if (!deadlineVal) {
+        alert('Deadline harus diisi.');
+        return;
+      }
+      // Ensure date is valid and not past date (allow today)
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const deadlineDate = new Date(deadlineVal);
+      if (deadlineDate < today) {
+        alert('Deadline tidak boleh di masa lalu.');
+        return;
+      }
+
+      const categoryVal = categoryInput.value;
+      if (!categoryVal) {
+        alert('Kategori harus dipilih.');
+        return;
+      }
+
+      // Add new task
+      const newTask = {
+        id: Date.now(),
+        name: nameVal,
+        deadline: deadlineVal,
+        category: categoryVal,
+        status: 'on progress'
+      };
+
+      tasks.push(newTask);
+      saveTasks();
+      renderTasks();
+
+      // Reset form
+      form.reset();
+      categoryInput.selectedIndex = 0;
+      taskNameInput.focus();
+    });
+
+    // Filters change handlers
+    filterCategory.addEventListener('change', renderTasks);
+    filterDeadline.addEventListener('change', renderTasks);
+
+    // Init
+    loadTasks();
+  })();
+</script>
+
+</body>
+</html>
+
